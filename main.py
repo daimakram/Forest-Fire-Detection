@@ -312,7 +312,12 @@ def main(args):
                     for name in filenames:
                         torch.save(coco_evaluator.coco_eval["bbox"].eval,
                                    output_dir / "eval" / name)
-
+    #--- saving model-----
+    print("saving Model--------------------------")
+    checkpoint_path = output_dir/f'whole_model.pth'
+    torch.save(model, checkpoint_path)
+    print("model saved--------------------")
+    
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))

@@ -28,6 +28,9 @@ from models import build_model
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Deformable DETR Detector', add_help=False)
+    
+    parser.add_argument('--inf', default=0, type=bool) #new
+    
     parser.add_argument('--lr', default=2e-4, type=float)
     parser.add_argument('--lr_backbone_names', default=["backbone.0"], type=str, nargs='+')
     parser.add_argument('--lr_backbone', default=2e-5, type=float)
@@ -124,203 +127,367 @@ def get_args_parser():
     parser.add_argument('--cache_mode', default=False, action='store_true', help='whether to cache images on memory')
 
     return parser
+#new
+import torchvision.transforms as T
+
+transform = T.Compose([
+    T.Resize(800),
+    T.ToTensor(),
+    T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
+
+
+def inference():
+  print("inference")
+  utils.init_distributed_mode(args)
+  print("git:\n  {}\n".format(utils.get_sha()))
+
+  if args.frozen_weights is not None:
+      assert args.masks, "Frozen training is meant for segmentation only"
+  print(args)
+
+  device = torch.device(args.device)
+
+  # fix the seed for reproducibility
+  seed = args.seed + utils.get_rank()
+  torch.manual_seed(seed)
+  np.random.seed(seed)
+  random.seed(seed)
+  print("starting")
+  model2, criterion2, postprocessors2 = build_model(args)
+  model2.to(device)
+  print("model created")
+  
+  checkpoint = '/content/FineTuning-deformable-detr/exps/r50_deformable_detr_single_scale/checkpoint.pth'
+  # checkpoint = '/content/drive/MyDrive/finetune_deformable/r50_deformable_detr_single_scale-checkpoint.pth'
+  # checkpoint = '/content/FineTuning-deformable-detr/my_check/checkpoint.pth'
+
+  checkpoint = torch.load(checkpoint, map_location='cpu')
+  # checkpoint = torch.load(args.resume, map_location='cpu')
+  # print(checkpoint)
+  model2.load_state_dict(checkpoint['model'], strict=False)
+  print("model loaded")
+  if torch.cuda.is_available():
+      model2.cuda()
+  model2.eval()
+  # inference code 
+  # find img url
+  # model(img)
+
+  from PIL import Image, ImageFont, ImageDraw, ImageEnhance
+  import requests
+  import io
+
+  # url = 'https://drive.google.com/file/d/1tYPbfnm2Ybw1YTk3VAS24NqFRELJhTj5/view?usp=sharing'
+  
+  # url = 'data:image/jpeg;base64,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'
+
+  # im = Image.open(requests.get(url, stream=True).raw)
+
+
+  # url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+  url = "/content/FineTuning-deformable-detr/data/coco/test/fire_0505_jpg.rf.bf5700aa35d19a52d8855895353a98d7.jpg"
+  # url = "/content/FineTuning-deformable-detr/data/coco/test/1499545303_-00960_jpg.rf.760e838e8d2d50d33534f9f5f809b936.jpg"
+  # im = Image.open(requests.get(url, stream=True).raw) # url
+  im = Image.open(url) # local
+
+  img = transform(im).unsqueeze(0)
+  img=img.cuda()
+
+  outputs = model2(img)
+  out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
+  print(out_logits)
+  print(out_logits.shape)
+
+  import torch.nn as nn
+  m = nn.Softmax(dim=1)
+  # input = torch.randn(2, 3)
+  prob = m(out_logits)
+  print(prob)
+  print(prob.shape)
+  tensor_shape = out_logits.shape
+  # prob = out_logits.softmax(tensor_shape)
+  topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
+  scores = topk_values
+  topk_boxes = topk_indexes // out_logits.shape[2]
+  
+  from util import box_ops
+  
+  labels = topk_indexes % out_logits.shape[2]
+  boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
+  boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1,1,4))
+
+  keep = scores[0] > 0.2
+  boxes = boxes[0, keep]
+  labels = labels[0, keep]
+
+  # and from relative [0, 1] to absolute [0, height] coordinates
+  im_h,im_w = im.size
+  #print('im_h,im_w',im_h,im_w)
+  target_sizes =torch.tensor([[im_w,im_h]])
+  target_sizes =target_sizes.cuda()
+  img_h, img_w = target_sizes.unbind(1)
+  scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+  boxes = boxes * scale_fct[:, None, :]
+  # print(time.time()-t0)
+  #plot_results
+  # source_img = Image.open(requests.get(url, stream=True).raw).convert("RGBA")
+  source_img = Image.open(url).convert("RGBA")
+      
+  #fnt = ImageFont.truetype("/content/content/Deformable-DETR/font/Aaargh.ttf", 18)
+  draw = ImageDraw.Draw(source_img)
+  #print ('label' , labels.tolist())
+  label_list =  labels.tolist()
+  #print("Boxes",boxes,boxes.tolist())
+  i=0
+
+  # label_names = ['N/A', 'table', 'smoke', 'non-smoke']
+  colors = ['red', 'blue', 'green', 'yellow', 'black']
+  label_names = [
+      'N/A', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+      'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A',
+      'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse',
+      'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'N/A', 'backpack',
+      'umbrella', 'N/A', 'N/A', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis',
+      'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove',
+      'skateboard', 'surfboard', 'tennis racket', 'bottle', 'N/A', 'wine glass',
+      'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich',
+      'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
+      'chair', 'couch', 'potted plant', 'bed', 'N/A', 'dining table', 'N/A',
+      'N/A', 'toilet', 'N/A', 'tv', 'laptop', 'mouse', 'remote', 'keyboard',
+      'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A',
+      'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier',
+      'toothbrush', 'smoke', 'no-smoke'
+  ]
+  print("THE LABELS:")
+
+  for xmin, ymin, xmax, ymax in boxes[0].tolist():
+      print(i, label_list[i])
+      # draw.rectangle(((xmin, ymin), (xmax, ymax)), outline =colors[label_list[i]-1])
+      draw.rectangle(((xmin, ymin), (xmax, ymax)), outline=colors[(label_list[i]-1)%4] )
+      # print('--------')
+      # print('i= ', i)
+      # print('label is = ', label_list[i]-1)
+      # print(label_names[label_list[i]-1])
+      if ymin-18 >=0 :
+        ymin = ymin-18
+      # draw.text((xmin, ymin), label_names[label_list[i]-1], anchor = 'md', fill=colors[label_list[i]-1])
+      # draw.text((xmin, ymin), label_names[label_list[i]-1], anchor = 'md', fill= "white" )
+      draw.text((xmin, ymin), label_names[label_list[i]], anchor = 'md', fill= "white" )
+      print(label_names[label_list[i]])
+      i+=1
+  
+
+  import matplotlib.pyplot as plt
+
+  out_imgName = 'test_bem_sucedido.png'
+  source_img.save(out_imgName, "png")
+  results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
+  print("Outputs",results)
+  print("ending")
+  # plt.imshow(source_img)
+
+
 
 
 def main(args):
-    utils.init_distributed_mode(args)
-    print("git:\n  {}\n".format(utils.get_sha()))
-
-    if args.frozen_weights is not None:
-        assert args.masks, "Frozen training is meant for segmentation only"
-    print(args)
-
-    device = torch.device(args.device)
-
-    # fix the seed for reproducibility
-    seed = args.seed + utils.get_rank()
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
-
-    model, criterion, postprocessors = build_model(args)
-    model.to(device)
-
-    model_without_ddp = model
-    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print('number of params:', n_parameters)
-
-    dataset_train = build_dataset(image_set='train', args=args)
-    dataset_val = build_dataset(image_set='val', args=args)
-
-    if args.distributed:
-        if args.cache_mode:
-            sampler_train = samplers.NodeDistributedSampler(dataset_train)
-            sampler_val = samplers.NodeDistributedSampler(dataset_val, shuffle=False)
-        else:
-            sampler_train = samplers.DistributedSampler(dataset_train)
-            sampler_val = samplers.DistributedSampler(dataset_val, shuffle=False)
+    if args.inf == 1:
+      inference()
     else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+      utils.init_distributed_mode(args)
+      print("git:\n  {}\n".format(utils.get_sha()))
 
-    batch_sampler_train = torch.utils.data.BatchSampler(
-        sampler_train, args.batch_size, drop_last=True)
+      if args.frozen_weights is not None:
+          assert args.masks, "Frozen training is meant for segmentation only"
+      print(args)
 
-    data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
-                                   collate_fn=utils.collate_fn, num_workers=args.num_workers,
-                                   pin_memory=True)
-    data_loader_val = DataLoader(dataset_val, args.batch_size, sampler=sampler_val,
-                                 drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers,
-                                 pin_memory=True)
+      device = torch.device(args.device)
 
-    # lr_backbone_names = ["backbone.0", "backbone.neck", "input_proj", "transformer.encoder"]
-    def match_name_keywords(n, name_keywords):
-        out = False
-        for b in name_keywords:
-            if b in n:
-                out = True
-                break
-        return out
+      # fix the seed for reproducibility
+      seed = args.seed + utils.get_rank()
+      torch.manual_seed(seed)
+      np.random.seed(seed)
+      random.seed(seed)
+      #train
+      model, criterion, postprocessors = build_model(args)
+      model.to(device)
 
-    for n, p in model_without_ddp.named_parameters():
-        print(n)
+      model_without_ddp = model
+      n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+      print('number of params:', n_parameters)
 
-    param_dicts = [
-        {
-            "params":
-                [p for n, p in model_without_ddp.named_parameters()
-                 if not match_name_keywords(n, args.lr_backbone_names) and not match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
-            "lr": args.lr,
-        },
-        {
-            "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
-            "lr": args.lr_backbone,
-        },
-        {
-            "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
-            "lr": args.lr * args.lr_linear_proj_mult,
-        }
-    ]
-    if args.sgd:
-        optimizer = torch.optim.SGD(param_dicts, lr=args.lr, momentum=0.9,
-                                    weight_decay=args.weight_decay)
-    else:
-        optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
+      dataset_train = build_dataset(image_set='train', args=args)
+      dataset_val = build_dataset(image_set='val', args=args)
+
+      if args.distributed:
+          if args.cache_mode:
+              sampler_train = samplers.NodeDistributedSampler(dataset_train)
+              sampler_val = samplers.NodeDistributedSampler(dataset_val, shuffle=False)
+          else:
+              sampler_train = samplers.DistributedSampler(dataset_train)
+              sampler_val = samplers.DistributedSampler(dataset_val, shuffle=False)
+      else:
+          sampler_train = torch.utils.data.RandomSampler(dataset_train)
+          sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+
+      batch_sampler_train = torch.utils.data.BatchSampler(
+          sampler_train, args.batch_size, drop_last=True)
+
+      data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
+                                    collate_fn=utils.collate_fn, num_workers=args.num_workers,
+                                    pin_memory=True)
+      data_loader_val = DataLoader(dataset_val, args.batch_size, sampler=sampler_val,
+                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers,
+                                  pin_memory=True)
+
+      # lr_backbone_names = ["backbone.0", "backbone.neck", "input_proj", "transformer.encoder"]
+      def match_name_keywords(n, name_keywords):
+          out = False
+          for b in name_keywords:
+              if b in n:
+                  out = True
+                  break
+          return out
+
+      for n, p in model_without_ddp.named_parameters():
+          print(n)
+
+      param_dicts = [
+          {
+              "params":
+                  [p for n, p in model_without_ddp.named_parameters()
+                  if not match_name_keywords(n, args.lr_backbone_names) and not match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
+              "lr": args.lr,
+          },
+          {
+              "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
+              "lr": args.lr_backbone,
+          },
+          {
+              "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
+              "lr": args.lr * args.lr_linear_proj_mult,
+          }
+      ]
+      if args.sgd:
+          optimizer = torch.optim.SGD(param_dicts, lr=args.lr, momentum=0.9,
                                       weight_decay=args.weight_decay)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+      else:
+          optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
+                                        weight_decay=args.weight_decay)
+      lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model_without_ddp = model.module
+      if args.distributed:
+          model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+          model_without_ddp = model.module
 
-    if args.dataset_file == "coco_panoptic":
-        # We also evaluate AP during panoptic training, on original coco DS
-        coco_val = datasets.coco.build("val", args)
-        base_ds = get_coco_api_from_dataset(coco_val)
-    else:
-        base_ds = get_coco_api_from_dataset(dataset_val)
+      if args.dataset_file == "coco_panoptic":
+          # We also evaluate AP during panoptic training, on original coco DS
+          coco_val = datasets.coco.build("val", args)
+          base_ds = get_coco_api_from_dataset(coco_val)
+      else:
+          base_ds = get_coco_api_from_dataset(dataset_val)
 
-    if args.frozen_weights is not None:
-        checkpoint = torch.load(args.frozen_weights, map_location='cpu')
-        model_without_ddp.detr.load_state_dict(checkpoint['model'])
+      if args.frozen_weights is not None:
+          checkpoint = torch.load(args.frozen_weights, map_location='cpu')
+          model_without_ddp.detr.load_state_dict(checkpoint['model'])
 
-    output_dir = Path(args.output_dir)
-    if args.resume:
-        if args.resume.startswith('https'):
-            checkpoint = torch.hub.load_state_dict_from_url(
-                args.resume, map_location='cpu', check_hash=True)
-        else:
-            checkpoint = torch.load(args.resume, map_location='cpu')
-        missing_keys, unexpected_keys = model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
-        unexpected_keys = [k for k in unexpected_keys if not (k.endswith('total_params') or k.endswith('total_ops'))]
-        if len(missing_keys) > 0:
-            print('Missing Keys: {}'.format(missing_keys))
-        if len(unexpected_keys) > 0:
-            print('Unexpected Keys: {}'.format(unexpected_keys))
-        if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            import copy
-            p_groups = copy.deepcopy(optimizer.param_groups)
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            for pg, pg_old in zip(optimizer.param_groups, p_groups):
-                pg['lr'] = pg_old['lr']
-                pg['initial_lr'] = pg_old['initial_lr']
-            print(optimizer.param_groups)
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            # todo: this is a hack for doing experiment that resume from checkpoint and also modify lr scheduler (e.g., decrease lr in advance).
-            args.override_resumed_lr_drop = True
-            if args.override_resumed_lr_drop:
-                print('Warning: (hack) args.override_resumed_lr_drop is set to True, so args.lr_drop would override lr_drop in resumed lr_scheduler.')
-                lr_scheduler.step_size = args.lr_drop
-                lr_scheduler.base_lrs = list(map(lambda group: group['initial_lr'], optimizer.param_groups))
-            lr_scheduler.step(lr_scheduler.last_epoch)
-            args.start_epoch = checkpoint['epoch'] + 1
-        # check the resumed model
-        if not args.eval:
-            test_stats, coco_evaluator = evaluate(
-                model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
-            )
-    
-    if args.eval:
-        test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
-                                              data_loader_val, base_ds, device, args.output_dir)
-        if args.output_dir:
-            utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
-        return
+      output_dir = Path(args.output_dir)
+      if args.resume:
+          if args.resume.startswith('https'):
+              checkpoint = torch.hub.load_state_dict_from_url(
+                  args.resume, map_location='cpu', check_hash=True)
+          else:
+              checkpoint = torch.load(args.resume, map_location='cpu') # imp
+          missing_keys, unexpected_keys = model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
+          unexpected_keys = [k for k in unexpected_keys if not (k.endswith('total_params') or k.endswith('total_ops'))]
+          if len(missing_keys) > 0:
+              print('Missing Keys: {}'.format(missing_keys))
+          if len(unexpected_keys) > 0:
+              print('Unexpected Keys: {}'.format(unexpected_keys))
+          if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
+              import copy
+              p_groups = copy.deepcopy(optimizer.param_groups)
+              optimizer.load_state_dict(checkpoint['optimizer'])
+              for pg, pg_old in zip(optimizer.param_groups, p_groups):
+                  pg['lr'] = pg_old['lr']
+                  pg['initial_lr'] = pg_old['initial_lr']
+              print(optimizer.param_groups)
+              lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+              # todo: this is a hack for doing experiment that resume from checkpoint and also modify lr scheduler (e.g., decrease lr in advance).
+              args.override_resumed_lr_drop = True
+              if args.override_resumed_lr_drop:
+                  print('Warning: (hack) args.override_resumed_lr_drop is set to True, so args.lr_drop would override lr_drop in resumed lr_scheduler.')
+                  lr_scheduler.step_size = args.lr_drop
+                  lr_scheduler.base_lrs = list(map(lambda group: group['initial_lr'], optimizer.param_groups))
+              lr_scheduler.step(lr_scheduler.last_epoch)
+              args.start_epoch = checkpoint['epoch'] + 1
+          # check the resumed model
+          if not args.eval:
+              test_stats, coco_evaluator = evaluate(
+                  model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
+              )
+      
+      if args.eval:
+          test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
+                                                data_loader_val, base_ds, device, args.output_dir)
+          if args.output_dir:
+              utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
+          return
 
-    print("Start training")
-    start_time = time.time()
-    for epoch in range(0, 10):
-        if args.distributed:
-            sampler_train.set_epoch(epoch)
-        train_stats = train_one_epoch(
-            model, criterion, data_loader_train, optimizer, device, epoch, args.clip_max_norm)
-        lr_scheduler.step()
-        if args.output_dir:
-            checkpoint_paths = [output_dir / 'checkpoint.pth']
-            # extra checkpoint before LR drop and every 5 epochs
-            if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 5 == 0:
-                checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
-            for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({
-                    'model': model_without_ddp.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    'args': args,
-                }, checkpoint_path)
+      print("Start training")
+      start_time = time.time()
+      for epoch in range(0, 10):
+          if args.distributed:
+              sampler_train.set_epoch(epoch)
+          train_stats = train_one_epoch(
+              model, criterion, data_loader_train, optimizer, device, epoch, args.clip_max_norm)
+          lr_scheduler.step()
+          if args.output_dir:
+              checkpoint_paths = [output_dir / 'checkpoint.pth']
+              # extra checkpoint before LR drop and every 5 epochs
+              if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 5 == 0:
+                  checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
+              for checkpoint_path in checkpoint_paths:
+                  utils.save_on_master({
+                      'model': model_without_ddp.state_dict(),
+                      'optimizer': optimizer.state_dict(),
+                      'lr_scheduler': lr_scheduler.state_dict(),
+                      'epoch': epoch,
+                      'args': args,
+                  }, checkpoint_path)
 
-        test_stats, coco_evaluator = evaluate(
-            model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
-        )
+          test_stats, coco_evaluator = evaluate(
+              model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
+          )
 
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                     **{f'test_{k}': v for k, v in test_stats.items()},
-                     'epoch': epoch,
-                     'n_parameters': n_parameters}
+          log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                       **{f'test_{k}': v for k, v in test_stats.items()},
+                       'epoch': epoch,
+                       'n_parameters': n_parameters}
 
-        if args.output_dir and utils.is_main_process():
-            with (output_dir / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
+          if args.output_dir and utils.is_main_process():
+              with (output_dir / "log.txt").open("a") as f:
+                  f.write(json.dumps(log_stats) + "\n")
 
-            # for evaluation logs
-            if coco_evaluator is not None:
-                (output_dir / 'eval').mkdir(exist_ok=True)
-                if "bbox" in coco_evaluator.coco_eval:
-                    filenames = ['latest.pth']
-                    if epoch % 50 == 0:
-                        filenames.append(f'{epoch:03}.pth')
-                    for name in filenames:
-                        torch.save(coco_evaluator.coco_eval["bbox"].eval,
-                                   output_dir / "eval" / name)
-    #--- saving model-----
-    print("saving Model--------------------------")
-    checkpoint_path = output_dir/f'whole_model.pth'
-    torch.save(model, checkpoint_path)
-    print("model saved--------------------")
-    
-    total_time = time.time() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
+              # for evaluation logs
+              if coco_evaluator is not None:
+                  (output_dir / 'eval').mkdir(exist_ok=True)
+                  if "bbox" in coco_evaluator.coco_eval:
+                      filenames = ['latest.pth']
+                      if epoch % 50 == 0:
+                          filenames.append(f'{epoch:03}.pth')
+                      for name in filenames:
+                          torch.save(coco_evaluator.coco_eval["bbox"].eval,
+                                     output_dir / "eval" / name)
+      # #--- saving model-----
+      # print("saving Model--------------------------")
+      # checkpoint_path = output_dir/f'whole_model.pth'
+      # torch.save(model, checkpoint_path)
+      # print("model saved--------------------")
+      
+      total_time = time.time() - start_time
+      total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+      print('Training time {}'.format(total_time_str))
 
 
 if __name__ == '__main__':

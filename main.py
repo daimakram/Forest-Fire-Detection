@@ -30,13 +30,15 @@ def get_args_parser():
     parser = argparse.ArgumentParser('Deformable DETR Detector', add_help=False)
     
     parser.add_argument('--inf', default=0, type=bool) #new
-    
+    parser.add_argument('--num_classes', default=None, type=int,
+                        help='#classes in your dataset, which can override the value hard-coded in file models/detr.py') #new
+    parser.add_argument('--finetune', default=None, type=int) #new
     parser.add_argument('--lr', default=2e-4, type=float)
     parser.add_argument('--lr_backbone_names', default=["backbone.0"], type=str, nargs='+')
     parser.add_argument('--lr_backbone', default=2e-5, type=float)
     parser.add_argument('--lr_linear_proj_names', default=['reference_points', 'sampling_offsets'], type=str, nargs='+')
     parser.add_argument('--lr_linear_proj_mult', default=0.1, type=float)
-    parser.add_argument('--batch_size', default=2, type=int)
+    parser.add_argument('--batch_size', default=1, type=int)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
     parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--lr_drop', default=40, type=int)
@@ -244,20 +246,7 @@ def inference():
   # label_names = ['N/A', 'table', 'smoke', 'non-smoke']
   colors = ['red', 'blue', 'green', 'yellow', 'black']
   label_names = [
-      'N/A', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
-      'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A',
-      'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse',
-      'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'N/A', 'backpack',
-      'umbrella', 'N/A', 'N/A', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis',
-      'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove',
-      'skateboard', 'surfboard', 'tennis racket', 'bottle', 'N/A', 'wine glass',
-      'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich',
-      'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
-      'chair', 'couch', 'potted plant', 'bed', 'N/A', 'dining table', 'N/A',
-      'N/A', 'toilet', 'N/A', 'tv', 'laptop', 'mouse', 'remote', 'keyboard',
-      'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A',
-      'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier',
-      'toothbrush', 'smoke', 'no-smoke'
+      'N/A', 'Smoke'
   ]
   print("THE LABELS:")
 
@@ -288,7 +277,20 @@ def inference():
   # plt.imshow(source_img)
 
 
-
+def fineTune(checkpoint):
+    del checkpoint["model"]["class_embed.0.weight"]
+    del checkpoint["model"]["class_embed.0.bias"]
+    del checkpoint["model"]["class_embed.1.weight"]
+    del checkpoint["model"]["class_embed.1.bias"]
+    del checkpoint["model"]["class_embed.2.weight"]
+    del checkpoint["model"]["class_embed.2.bias"]
+    del checkpoint["model"]["class_embed.3.weight"]
+    del checkpoint["model"]["class_embed.3.bias"]
+    del checkpoint["model"]["class_embed.4.weight"]
+    del checkpoint["model"]["class_embed.4.bias"]
+    del checkpoint["model"]["class_embed.5.weight"]
+    del checkpoint["model"]["class_embed.5.bias"]
+    return checkpoint
 
 def main(args):
     if args.inf == 1:
@@ -398,13 +400,15 @@ def main(args):
                   args.resume, map_location='cpu', check_hash=True)
           else:
               checkpoint = torch.load(args.resume, map_location='cpu') # imp
+              if args.finetune==1:
+                checkpoint=fineTune(checkpoint)
           missing_keys, unexpected_keys = model_without_ddp.load_state_dict(checkpoint['model'], strict=False)
           unexpected_keys = [k for k in unexpected_keys if not (k.endswith('total_params') or k.endswith('total_ops'))]
           if len(missing_keys) > 0:
               print('Missing Keys: {}'.format(missing_keys))
           if len(unexpected_keys) > 0:
               print('Unexpected Keys: {}'.format(unexpected_keys))
-          if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
+          if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint and args.finetune==None:
               import copy
               p_groups = copy.deepcopy(optimizer.param_groups)
               optimizer.load_state_dict(checkpoint['optimizer'])

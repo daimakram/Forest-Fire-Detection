@@ -35,7 +35,8 @@ def get_args_parser():
                         help='#classes in your dataset, which can override the value hard-coded in file models/detr.py') #new
     parser.add_argument('--finetune', default=None, type=int) #new
     parser.add_argument('--testDataInput', default=None, type=str) #new
-    parser.add_argument('--testDataOutput', default=None, type=str) #new    
+    parser.add_argument('--testDataOutput', default=None, type=str) #new   
+    parser.add_argument('--save_path', default='', type=str) #new  
     
     parser.add_argument('--lr', default=2e-4, type=float)
     parser.add_argument('--lr_backbone_names', default=["backbone.0"], type=str, nargs='+')
@@ -501,7 +502,7 @@ def main(args):
 
       model_without_ddp = model
       n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-      print('number of params:', n_parameters)
+      # print('number of params:', n_parameters)
 
       dataset_train = build_dataset(image_set='train', args=args)
       dataset_val = build_dataset(image_set='val', args=args)
@@ -600,7 +601,7 @@ def main(args):
               for pg, pg_old in zip(optimizer.param_groups, p_groups):
                   pg['lr'] = pg_old['lr']
                   pg['initial_lr'] = pg_old['initial_lr']
-              print(optimizer.param_groups)
+              # print(optimizer.param_groups)
               lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
               # todo: this is a hack for doing experiment that resume from checkpoint and also modify lr scheduler (e.g., decrease lr in advance).
               args.override_resumed_lr_drop = True
@@ -625,7 +626,15 @@ def main(args):
 
       print("Start training")
       start_time = time.time()
-      for epoch in range(0, 9):
+      for epoch in range(args.start_epoch, args.epochs):
+          print('saving to ',args.save_path)
+          utils.save_on_master({
+                      'model': model_without_ddp.state_dict(),
+                      'optimizer': optimizer.state_dict(),
+                      'lr_scheduler': lr_scheduler.state_dict(),
+                      'epoch': epoch,
+                      'args': args,
+                  }, args.save_path+"checkpoint_latest1.pth")
           if args.distributed:
               sampler_train.set_epoch(epoch)
           train_stats = train_one_epoch(
@@ -648,6 +657,11 @@ def main(args):
           test_stats, coco_evaluator = evaluate(
               model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
           )
+
+          # f= open("/content/drive/MyDrive/Latest_detr/shadd/total.txt","w+") # write # of epochs
+          # f.write("\n"+epoch)
+          # f.close()
+
 
           log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                        **{f'test_{k}': v for k, v in test_stats.items()},
